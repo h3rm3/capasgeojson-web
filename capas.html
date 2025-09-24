@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Capas GeoJSON · GitHub RAW</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    html, body, #map { height:100%; margin:0 }
+    .legend{background:#fff;padding:.6rem .8rem;border-radius:.5rem;box-shadow:0 2px 10px rgba(0,0,0,.15);line-height:1.2}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([17.06, -96.72], 8);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom: 20, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    const urls = {
+      "Cuenca Atoyac-Salado": "https://raw.githubusercontent.com/h3rm3/capasgeojson-web/refs/heads/main/Cuenca_Atoyac_Salado.geojson",
+      "Cuerpos de agua":      "https://raw.githubusercontent.com/h3rm3/capasgeojson-web/refs/heads/main/Cuerpos_agua.geojson",
+      "Polígonos urbanos":    "https://raw.githubusercontent.com/h3rm3/capasgeojson-web/refs/heads/main/Poligonos_Urbanos.geojson",
+      "Sitios monitoreo":     "https://raw.githubusercontent.com/h3rm3/capasgeojson-web/refs/heads/main/Sitios_Monitoreo.geojson"
+      // "Ríos":               "https://raw.githubusercontent.com/h3rm3/capasgeojson-web/refs/heads/main/Rios.geojson" // añadir cuando lo simplifiques
+    };
+
+    const styles = {
+      "Cuenca Atoyac-Salado": f => ({ color:'#7a003c', weight:2, fillOpacity:.05 }),
+      "Cuerpos de agua":      f => ({ color:'#0066cc', weight:1, fillColor:'#66a3ff', fillOpacity:.35 }),
+      "Polígonos urbanos":    f => ({ color:'#ff8800', weight:1, fillOpacity:.15 }),
+      "Sitios monitoreo":     f => ({ radius:6, color:'#1f2937', fillColor:'#10b981', fillOpacity:.9 })
+    };
+
+    const layers = {};
+    const fitGroup = L.featureGroup();
+
+    function popup(layer){
+      const p = layer.feature?.properties || {};
+      const rows = Object.keys(p).slice(0,12).map(k=>`<tr><td><b>${k}</b></td><td>${p[k]}</td></tr>`).join('');
+      layer.bindPopup(`<div style="min-width:220px"><table>${rows || '<tr><td>Sin atributos</td></tr>'}</table></div>`);
+    }
+
+    async function load(name, url){
+      try{
+        const r = await fetch(url, {mode:'cors'});
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+
+        const layer = (name === "Sitios monitoreo")
+          ? L.geoJSON(data, { pointToLayer:(f,ll)=>L.circleMarker(ll, styles[name](f)), onEachFeature:(f,l)=>popup(l) })
+          : L.geoJSON(data, { style:styles[name] || (()=>({color:'#555'})), onEachFeature:(f,l)=>popup(l) });
+
+        layers[name] = layer; layer.addTo(map); fitGroup.addLayer(layer);
+        if(window.ctrl) map.removeControl(window.ctrl);
+        window.ctrl = L.control.layers({ "OpenStreetMap": osm }, layers, { collapsed:false }).addTo(map);
+        map.fitBounds(fitGroup.getBounds(), { padding:[20,20] });
+      }catch(e){
+        console.error(`Error en ${name}:`, e);
+      }
+    }
+
+    Object.entries(urls).forEach(([n,u]) => load(n,u));
+
+    const legend = L.control({position:'bottomleft'});
+    legend.onAdd = () => {
+      const d = L.DomUtil.create('div','legend');
+      d.innerHTML = '<b>Leyenda</b><div>🟣 Cuenca</div><div>🔵 Cuerpos de agua</div><div>🟠 Polígonos urbanos</div><div>● Sitios de monitoreo</div>';
+      return d;
+    };
+    legend.addTo(map);
+  </script>
+</body>
+</html>
